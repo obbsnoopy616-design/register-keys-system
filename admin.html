@@ -252,18 +252,23 @@
             }
 
             try {
+                console.log("Verificando auth... API_URL:", API_URL);
                 const res = await fetch(API_URL + "/api/me", {
                     headers: { "Authorization": "Bearer " + authToken }
                 });
+                console.log("Auth status:", res.status);
 
                 if (res.ok) {
                     const data = await res.json();
                     showAdminScreen(data.email);
                 } else {
+                    const errText = await res.text();
+                    console.error("Auth error:", errText);
                     logout();
                 }
             } catch (err) {
                 console.error("Erro ao verificar auth:", err);
+                showToast("Erro de conexão: " + err.message, "error");
                 showLoginScreen();
             }
         }
@@ -367,8 +372,18 @@
 
         async function loadKeys() {
             try {
+                console.log("API_URL:", API_URL);
+                console.log("authToken:", authToken ? "presente" : "ausente");
                 const res = await apiFetch("/api/keys");
-                allKeys = await res.json();
+                console.log("Response status:", res.status);
+                const text = await res.text();
+                console.log("Response body:", text);
+                try {
+                    allKeys = JSON.parse(text);
+                } catch {
+                    showToast("Servidor retornou dados inválidos: " + text, "error");
+                    return;
+                }
                 renderKeys();
             } catch (err) {
                 console.error("Erro ao carregar keys:", err);
@@ -379,7 +394,9 @@
         async function loadStats() {
             try {
                 const res = await apiFetch("/api/keys/stats");
-                const stats = await res.json();
+                const text = await res.text();
+                console.log("Stats response:", text);
+                const stats = JSON.parse(text);
                 animateCounter("totalCount", stats.total);
                 animateCounter("availableCount", stats.available);
                 animateCounter("usedCount", stats.used);

@@ -19,9 +19,20 @@ app.use(express.json());
 // ============================================
 // CONFIGURAÇÃO
 // ============================================
-const JWT_SECRET = process.env.JWT_SECRET || "register-keys-secret-change-me-2024";
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@meusite.com";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
+// Credenciais obrigatórias via variáveis de ambiente
+const JWT_SECRET = process.env.JWT_SECRET;
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+// Validar variáveis de ambiente
+if (!JWT_SECRET) {
+    console.error("ERRO: JWT_SECRET não configurado");
+    process.exit(1);
+}
+if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+    console.error("ERRO: ADMIN_EMAIL e ADMIN_PASSWORD são obrigatórios");
+    process.exit(1);
+}
 
 // ============================================
 // BANCO DE DADOS EM ARQUIVO JSON
