@@ -1,3 +1,7 @@
+# Dependências
+node_modules/
+server/node_modules/
+
 # Arquivos temporários
 *.tmp
 *.log
@@ -6,5 +10,9 @@
 .DS_Store
 Thumbs.db
 
-# Arquivos de configuração local (não commitar chaves reais)
-# .env
+# Banco de dados do servidor
+server/keys-db.json
+server/users-db.json
+
+# Variáveis de ambiente
+.env
