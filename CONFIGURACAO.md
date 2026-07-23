@@ -12,22 +12,22 @@ O Firebase será utilizado para armazenar as Register Keys e gerenciar o acesso 
 4. Dê um apelido ao aplicativo (ex: `site`) e registre-o.
 5. **Importante:** O Firebase fornecerá um bloco de código contendo as credenciais (`apiKey`, `authDomain`, `projectId`, etc.). Copie esse bloco, pois você precisará dele nos próximos passos.
 
-## Passo 2: Configuração do Banco de Dados (Firestore)
+## Passo 2: Configuração do Banco de Dados (Realtime Database)
 
-O Firestore será o banco de dados onde as Register Keys serão armazenadas.
+O Realtime Database será o banco de dados onde as Register Keys serão armazenadas.
 
-1. No menu lateral esquerdo do Console do Firebase, clique em **Criação** > **Firestore Database**.
+1. No menu lateral esquerdo do Console do Firebase, clique em **Criação** > **Realtime Database**.
 2. Clique em **Criar banco de dados**.
-3. Escolha o local mais próximo de você (ex: `southamerica-east1` para Brasil) e selecione **Iniciar no modo de teste**.
-4. Clique em **Ativar**.
-5. **Regras de Segurança:** Vá na aba **Regras** do Firestore e substitua as regras padrão pelas regras abaixo para garantir que qualquer pessoa possa ler/escrever (necessário pois o site é estático e não possui backend próprio para validação de tokens):
+3. Escolha o local mais próximo de você (ex: `southamerica-east1` para Brasil).
+4. Selecione **Iniciar no modo de teste** e clique em **Ativar**.
+5. **Regras de Segurança:** Vá na aba **Regras** do Realtime Database e substitua as regras padrão pelas regras abaixo. Essas regras garantem que o Gerador (público) possa ler as keys, mas apenas o Painel ADM (autenticado) possa ler e escrever no banco:
 
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;
+```json
+{
+  "rules": {
+    "registerKeys": {
+      ".read": true,
+      ".write": "auth != null"
     }
   }
 }
@@ -57,6 +57,7 @@ Você precisa inserir as credenciais do Firebase nos arquivos do projeto para qu
 const firebaseConfig = {
     apiKey: "SUA_API_KEY",
     authDomain: "SEU_PROJETO.firebaseapp.com",
+    databaseURL: "https://SEU_PROJETO-default-rtdb.firebaseio.com",
     projectId: "SEU_PROJETO",
     storageBucket: "SEU_PROJETO.appspot.com",
     messagingSenderId: "SEU_SENDER_ID",

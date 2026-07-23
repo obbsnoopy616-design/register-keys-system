@@ -181,39 +181,33 @@
         </div>
     </div>
 
-    <!-- Firebase SDK -->
+    <!-- Firebase SDK (Realtime Database) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
         import {
             getAuth,
             signInWithEmailAndPassword,
             signOut,
-            onAuthStateChanged,
-            createUserWithEmailAndPassword
+            onAuthStateChanged
         } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
         import {
-            getFirestore,
-            collection,
-            addDoc,
-            getDocs,
-            doc,
-            updateDoc,
-            deleteDoc,
-            query,
-            orderBy,
-            serverTimestamp,
-            onSnapshot,
-            runTransaction,
-            where
-        } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+            getDatabase,
+            ref,
+            push,
+            set,
+            remove,
+            onValue,
+            update,
+            runTransaction
+        } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
         // ============================================
         // CONFIGURAÇÃO DO FIREBASE
-        // Substitua os valores abaixo pela sua configuração do Firebase
         // ============================================
         const firebaseConfig = {
             apiKey: "AIzaSyBhsVfsNup8T6pt6F4YNSnTRGGDVeWdwV0",
             authDomain: "snoopy-obb-a2742.firebaseapp.com",
+            databaseURL: "https://snoopy-obb-a2742-default-rtdb.firebaseio.com",
             projectId: "snoopy-obb-a2742",
             storageBucket: "snoopy-obb-a2742.firebasestorage.app",
             messagingSenderId: "671954206476",
@@ -223,15 +217,16 @@
         // Inicializar Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        const db = getFirestore(app);
-        const keysCollection = collection(db, "registerKeys");
+        const db = getDatabase(app);
+        const keysRef = ref(db, "registerKeys");
 
         // ============================================
         // VARIÁVEIS DE ESTADO
         // ============================================
-        let allKeys = [];
+        let allKeys = {};
         let currentFilter = "all";
-        let deletingKeyId = null;
+        let deletingKeyRef = null;
+        let currentUser = null;
 
         // ============================================
         // ELEMENTOS DOM
@@ -247,7 +242,6 @@
         const addBulkBtn = document.getElementById("addBulkBtn");
         const keysTableBody = document.getElementById("keysTableBody");
         const emptyState = document.getElementById("emptyState");
-        const toast = document.getElementById("toast");
         const confirmModal = document.getElementById("confirmModal");
         const confirmDeleteBtn = document.getElementById("confirmDeleteBtn");
         const cancelDeleteBtn = document.getElementById("cancelDeleteBtn");
@@ -259,13 +253,13 @@
         // ============================================
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                // Usuário autenticado - mostrar painel
+                currentUser = user;
                 loginScreen.classList.remove("active");
                 adminScreen.classList.add("active");
                 document.getElementById("adminEmail").textContent = user.email;
                 loadKeys();
             } else {
-                // Não autenticado - mostrar login
+                currentUser = null;
                 loginScreen.classList.add("active");
                 adminScreen.classList.remove("active");
             }
@@ -315,27 +309,27 @@
         });
 
         // ============================================
-        // GERENCIAMENTO DE KEYS
+        // GERENCIAMENTO DE KEYS (Realtime Database)
         // ============================================
 
         // Carregar keys em tempo real
         function loadKeys() {
-            const q = query(keysCollection, orderBy("createdAt", "desc"));
-            onSnapshot(q, (snapshot) => {
-                allKeys = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                }));
+            onValue(keysRef, (snapshot) => {
+                allKeys = snapshot.val() || {};
                 updateStats();
                 renderKeys();
+            }, (error) => {
+                console.error("Erro ao carregar keys:", error);
+                showToast("Erro ao carregar dados: " + error.message, "error");
             });
         }
 
         // Atualizar estatísticas
         function updateStats() {
-            const total = allKeys.length;
-            const available = allKeys.filter(k => k.status === "available").length;
-            const used = allKeys.filter(k => k.status === "used").length;
+            const keysArray = Object.values(allKeys);
+            const total = keysArray.length;
+            const available = keysArray.filter(k => k.status === "available").length;
+            const used = keysArray.filter(k => k.status === "used").length;
 
             animateCounter("totalCount", total);
             animateCounter("availableCount", available);
@@ -364,11 +358,16 @@
 
         // Renderizar tabela de keys
         function renderKeys() {
-            let filtered = allKeys;
+            const keysArray = Object.entries(allKeys).map(([id, data]) => ({
+                id,
+                ...data
+            }));
+
+            let filtered = keysArray;
             if (currentFilter === "available") {
-                filtered = allKeys.filter(k => k.status === "available");
+                filtered = keysArray.filter(k => k.status === "available");
             } else if (currentFilter === "used") {
-                filtered = allKeys.filter(k => k.status === "used");
+                filtered = keysArray.filter(k => k.status === "used");
             }
 
             if (filtered.length === 0) {
@@ -403,10 +402,11 @@
             // Adicionar event listeners para botões de excluir
             document.querySelectorAll(".delete-btn").forEach(btn => {
                 btn.addEventListener("click", () => {
-                    deletingKeyId = btn.dataset.id;
-                    const key = allKeys.find(k => k.id === deletingKeyId);
-                    if (key) {
-                        document.getElementById("modalKeyText").textContent = key.key;
+                    deletingKeyRef = ref(db, "registerKeys/" + btn.dataset.id);
+                    const key = Object.values(allKeys).find(k => k.key === btn.dataset.key || keysArray.find(ka => ka.id === btn.dataset.id));
+                    const keyData = Object.entries(allKeys).find(([id]) => id === btn.dataset.id);
+                    if (keyData) {
+                        document.getElementById("modalKeyText").textContent = keyData[1].key;
                     }
                     confirmModal.classList.remove("hidden");
                 });
@@ -415,6 +415,11 @@
 
         // Adicionar key individual
         addSingleBtn.addEventListener("click", async () => {
+            if (!currentUser) {
+                showFeedback("Você precisa estar logado", "error");
+                return;
+            }
+
             const keyInput = document.getElementById("newKeyInput");
             const keyValue = keyInput.value.trim();
 
@@ -424,7 +429,7 @@
             }
 
             // Verificar se a key já existe
-            const exists = allKeys.find(k => k.key === keyValue);
+            const exists = Object.values(allKeys).find(k => k.key === keyValue);
             if (exists) {
                 showFeedback("Esta key já existe no sistema", "error");
                 return;
@@ -434,10 +439,11 @@
             addSingleBtn.textContent = "Adicionando...";
 
             try {
-                await addDoc(keysCollection, {
+                const newKeyRef = push(keysRef);
+                await set(newKeyRef, {
                     key: keyValue,
                     status: "available",
-                    createdAt: serverTimestamp(),
+                    createdAt: Date.now(),
                     usedAt: null
                 });
                 keyInput.value = "";
@@ -452,6 +458,11 @@
 
         // Adicionar keys em lote
         addBulkBtn.addEventListener("click", async () => {
+            if (!currentUser) {
+                showFeedback("Você precisa estar logado", "error");
+                return;
+            }
+
             const textarea = document.getElementById("bulkKeysInput");
             const lines = textarea.value.split("\n").map(l => l.trim()).filter(l => l.length > 0);
 
@@ -461,7 +472,7 @@
             }
 
             // Filtrar keys duplicadas
-            const newKeys = lines.filter(l => !allKeys.find(k => k.key === l));
+            const newKeys = lines.filter(l => !Object.values(allKeys).find(k => k.key === l));
             if (newKeys.length === 0) {
                 showFeedback("Todas as keys já existem no sistema", "error");
                 return;
@@ -472,28 +483,25 @@
 
             let added = 0;
             let errors = 0;
+            const updates = {};
 
             try {
                 for (const keyValue of newKeys) {
-                    try {
-                        await addDoc(keysCollection, {
-                            key: keyValue,
-                            status: "available",
-                            createdAt: serverTimestamp(),
-                            usedAt: null
-                        });
-                        added++;
-                    } catch (err) {
-                        errors++;
-                    }
+                    const newKeyRef = push(keysRef);
+                    updates[newKeyRef.key] = {
+                        key: keyValue,
+                        status: "available",
+                        createdAt: Date.now(),
+                        usedAt: null
+                    };
                 }
 
+                // Usar update multi-location para enviar todas de uma vez
+                await set(keysRef, { ...allKeys, ...updates });
                 textarea.value = "";
-                if (errors === 0) {
-                    showFeedback(`${added} key(s) adicionada(s) com sucesso!`, "success");
-                } else {
-                    showFeedback(`${added} adicionada(s), ${errors} erro(s)`, "error");
-                }
+                showFeedback(`${newKeys.length} key(s) adicionada(s) com sucesso!`, "success");
+            } catch (error) {
+                showFeedback("Erro ao adicionar: " + error.message, "error");
             } finally {
                 addBulkBtn.disabled = false;
                 addBulkBtn.textContent = "Adicionar em Lote";
@@ -502,22 +510,22 @@
 
         // Excluir key
         confirmDeleteBtn.addEventListener("click", async () => {
-            if (!deletingKeyId) return;
+            if (!deletingKeyRef) return;
 
             try {
-                await deleteDoc(doc(db, "registerKeys", deletingKeyId));
+                await remove(deletingKeyRef);
                 showToast("Key excluída com sucesso", "success");
             } catch (error) {
                 showToast("Erro ao excluir: " + error.message, "error");
             } finally {
                 confirmModal.classList.add("hidden");
-                deletingKeyId = null;
+                deletingKeyRef = null;
             }
         });
 
         cancelDeleteBtn.addEventListener("click", () => {
             confirmModal.classList.add("hidden");
-            deletingKeyId = null;
+            deletingKeyRef = null;
         });
 
         // ============================================
@@ -585,7 +593,9 @@
 
         function formatDate(timestamp) {
             if (!timestamp) return "-";
-            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            // Se for string ISO ou número
+            const date = new Date(timestamp);
+            if (isNaN(date.getTime())) return "-";
             return date.toLocaleDateString("pt-BR", {
                 day: "2-digit",
                 month: "2-digit",
@@ -604,7 +614,7 @@
         // Fechar modal ao clicar no overlay
         document.querySelector(".modal-overlay").addEventListener("click", () => {
             confirmModal.classList.add("hidden");
-            deletingKeyId = null;
+            deletingKeyRef = null;
         });
 
         // Enter no campo de login

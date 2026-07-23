@@ -113,28 +113,23 @@
         <span id="toastMessage"></span>
     </div>
 
-    <!-- Firebase SDK -->
+    <!-- Firebase SDK (Realtime Database) -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
         import {
-            getFirestore,
-            collection,
-            query,
-            where,
-            limit,
-            getDocs,
-            doc,
-            updateDoc,
-            serverTimestamp
-        } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+            getDatabase,
+            ref,
+            onValue,
+            runTransaction
+        } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 
         // ============================================
         // CONFIGURAÇÃO DO FIREBASE
-        // Substitua os valores abaixo pela sua configuração do Firebase
         // ============================================
         const firebaseConfig = {
             apiKey: "AIzaSyBhsVfsNup8T6pt6F4YNSnTRGGDVeWdwV0",
             authDomain: "snoopy-obb-a2742.firebaseapp.com",
+            databaseURL: "https://snoopy-obb-a2742-default-rtdb.firebaseio.com",
             projectId: "snoopy-obb-a2742",
             storageBucket: "snoopy-obb-a2742.firebasestorage.app",
             messagingSenderId: "671954206476",
@@ -143,8 +138,8 @@
 
         // Inicializar Firebase
         const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const keysCollection = collection(db, "registerKeys");
+        const db = getDatabase(app);
+        const keysRef = ref(db, "registerKeys");
 
         // ============================================
         // ELEMENTOS DOM
@@ -163,6 +158,19 @@
         const errorMessage = document.getElementById("errorMessage");
 
         let isGenerating = false;
+        let keysData = {};
+
+        // ============================================
+        // CARREGAR KEYS EM TEMPO REAL
+        // ============================================
+        onValue(keysRef, (snapshot) => {
+            keysData = snapshot.val() || {};
+            // Atualizar contador de disponíveis
+            const available = Object.values(keysData).filter(k => k.status === "available").length;
+            document.getElementById("availableKeysCount").textContent = available;
+        }, (error) => {
+            console.error("Erro ao carregar keys:", error);
+        });
 
         // ============================================
         // ETAPA 1: VERIFICAÇÃO
@@ -172,29 +180,18 @@
             verifyStep2.classList.remove("hidden");
 
             // Verificar se há keys disponíveis
-            try {
-                const q = query(keysCollection, where("status", "==", "available"), limit(1));
-                const snapshot = await getDocs(q);
+            const available = Object.values(keysData).filter(k => k.status === "available").length;
 
-                // Aguardar para efeito visual
-                await new Promise(resolve => setTimeout(resolve, 1500));
+            // Aguardar para efeito visual
+            await new Promise(resolve => setTimeout(resolve, 1500));
 
-                if (snapshot.empty) {
-                    showScreen(errorScreen);
-                    errorMessage.textContent = "Nenhuma Register Key disponível no momento.";
-                    return;
-                }
-
-                // Atualizar contador
-                const totalQuery = query(keysCollection, where("status", "==", "available"));
-                const totalSnapshot = await getDocs(totalQuery);
-                document.getElementById("availableKeysCount").textContent = totalSnapshot.size;
-
-                showScreen(generatorScreen);
-            } catch (error) {
+            if (available === 0) {
                 showScreen(errorScreen);
-                errorMessage.textContent = "Erro ao verificar: " + error.message;
+                errorMessage.textContent = "Nenhuma Register Key disponível no momento.";
+                return;
             }
+
+            showScreen(generatorScreen);
         });
 
         // ============================================
@@ -210,71 +207,64 @@
 
             try {
                 // Usar transação para garantir que apenas um usuário receba a key
-                const availableQuery = query(
-                    keysCollection,
-                    where("status", "==", "available"),
-                    limit(1)
-                );
+                const result = await runTransaction(keysRef, (currentData) => {
+                    const data = currentData || {};
+                    const entries = Object.entries(data);
 
-                const snapshot = await getDocs(availableQuery);
+                    // Encontrar a primeira key disponível
+                    for (const [id, keyData] of entries) {
+                        if (keyData && keyData.status === "available") {
+                            // Marcar como usada
+                            data[id].status = "used";
+                            data[id].usedAt = Date.now();
+                            return data;
+                        }
+                    }
 
-                if (snapshot.empty) {
+                    // Nenhuma key disponível - abortar transação
+                    return;
+                });
+
+                if (!result.committed) {
                     showScreen(errorScreen);
                     errorMessage.textContent = "Nenhuma Register Key disponível. Todas já foram utilizadas.";
                     isGenerating = false;
                     return;
                 }
 
-                // Pegar a primeira key disponível
-                const keyDoc = snapshot.docs[0];
-                const keyData = keyDoc.data();
+                // Encontrar a key que foi marcada como usada
+                const snapshot = result.snapshot;
+                const updatedData = snapshot.val() || {};
+                const entries = Object.entries(updatedData);
 
-                // Marcar como usada via transação (proteção contra race conditions)
-                const keyRef = doc(db, "registerKeys", keyDoc.id);
-                const db = getFirestore(app);
-
-                // Transação atômica para marcar como usada
-                const { runTransaction } = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js");
-
-                await runTransaction(db, async (transaction) => {
-                    const currentDoc = await transaction.get(keyRef);
-
-                    if (!currentDoc.exists()) {
-                        throw new Error("Key não encontrada");
+                // Encontrar a última key usada (que tem usedAt)
+                let generatedKey = null;
+                for (const [id, keyData] of entries.reverse()) {
+                    if (keyData && keyData.status === "used" && keyData.usedAt) {
+                        // Verificar se é recente (usada nos últimos 5 segundos)
+                        const now = Date.now();
+                        if (now - keyData.usedAt < 5000) {
+                            generatedKey = keyData.key;
+                            break;
+                        }
                     }
-
-                    if (currentDoc.data().status !== "available") {
-                        throw new Error("Key já foi utilizada por outro usuário");
-                    }
-
-                    transaction.update(keyRef, {
-                        status: "used",
-                        usedAt: serverTimestamp(),
-                        generatedAt: serverTimestamp()
-                    });
-                });
+                }
 
                 // Aguardar para efeito visual
                 await new Promise(resolve => setTimeout(resolve, 1500));
 
-                // Mostrar resultado
-                resultKey.textContent = keyData.key;
-                resultBox.classList.remove("hidden");
-
-                // Esconder botão de gerar
-                generateBtn.classList.add("hidden");
+                if (generatedKey) {
+                    resultKey.textContent = generatedKey;
+                    resultBox.classList.remove("hidden");
+                } else {
+                    showScreen(errorScreen);
+                    errorMessage.textContent = "Erro ao gerar a key. Tente novamente.";
+                }
 
             } catch (error) {
                 console.error("Erro ao gerar key:", error);
-
-                if (error.message.includes("utilizada por outro")) {
-                    // Tentar novamente - outra pessoa pegou a key
-                    showScreen(errorScreen);
-                    errorMessage.textContent = "Esta key acabou de ser gerada. Tente novamente.";
-                } else {
-                    showScreen(errorScreen);
-                    errorMessage.textContent = "Erro ao gerar: " + error.message;
-                }
+                showScreen(errorScreen);
+                errorMessage.textContent = "Erro ao gerar: " + error.message;
             }
         });
 
@@ -305,7 +295,7 @@
             document.getElementById("verifyStep1").classList.remove("hidden");
             verifyStep2.classList.add("hidden");
             resultBox.classList.add("hidden");
-            generateBtn.classList.remove("hidden", "disabled");
+            generateBtn.classList.remove("hidden");
             generateBtn.disabled = false;
             isGenerating = false;
         });
@@ -326,19 +316,6 @@
             toastEl.classList.remove("hidden");
             setTimeout(() => { toastEl.classList.add("hidden"); }, 3000);
         }
-
-        // Verificar se há keys disponíveis ao carregar a página
-        (async () => {
-            try {
-                const q = query(keysCollection, where("status", "==", "available"), limit(1));
-                const snapshot = await getDocs(q);
-                const totalQuery = query(keysCollection, where("status", "==", "available"));
-                const totalSnapshot = await getDocs(totalQuery);
-                document.getElementById("availableKeysCount").textContent = totalSnapshot.size;
-            } catch (error) {
-                console.log("Erro ao carregar contador:", error.message);
-            }
-        })();
     </script>
 </body>
 </html>
