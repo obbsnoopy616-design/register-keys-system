@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel ADM - Register Keys</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Tela de Login -->
+    <div id="loginScreen" class="screen active">
+        <div class="login-container">
+            <div class="login-box">
+                <div class="logo">
+                    <div class="logo-icon">🔐</div>
+                    <h1>Painel ADM</h1>
+                    <p>Register Keys Manager</p>
+                </div>
+                <div id="loginForm">
+                    <div class="input-group">
+                        <label for="loginEmail">E-mail</label>
+                        <input type="email" id="loginEmail" placeholder="admin@email.com" autocomplete="email">
+                    </div>
+                    <div class="input-group">
+                        <label for="loginPassword">Senha</label>
+                        <input type="password" id="loginPassword" placeholder="Sua senha" autocomplete="current-password">
+                    </div>
+                    <button id="loginBtn" class="btn btn-primary btn-full">Entrar</button>
+                    <div id="loginError" class="error-msg hidden"></div>
+                </div>
+                <div id="loginLoading" class="loading hidden">
+                    <div class="spinner"></div>
+                    <p>Entrando...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Painel ADM Principal -->
+    <div id="adminScreen" class="screen">
+        <!-- Header -->
+        <header class="admin-header">
+            <div class="header-left">
+                <div class="logo-small">🔐</div>
+                <div class="header-title">
+                    <h2>Painel ADM</h2>
+                    <span class="header-subtitle">Register Keys Manager</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <span id="adminEmail" class="admin-email"></span>
+                <button id="logoutBtn" class="btn btn-outline btn-sm">Sair</button>
+            </div>
+        </header>
+
+        <!-- Conteúdo Principal -->
+        <main class="admin-content">
+            <!-- Cards de Estatísticas -->
+            <div class="stats-grid">
+                <div class="stat-card stat-total">
+                    <div class="stat-icon">📦</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="totalCount">0</span>
+                        <span class="stat-label">Total de Keys</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-available">
+                    <div class="stat-icon">✅</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="availableCount">0</span>
+                        <span class="stat-label">Disponíveis</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-used">
+                    <div class="stat-icon">❌</div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="usedCount">0</span>
+                        <span class="stat-label">Usadas</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Seção: Adicionar Key -->
+            <section class="panel-section">
+                <div class="section-header">
+                    <h3><span class="section-icon">➕</span> Adicionar Register Keys</h3>
+                </div>
+                <div class="add-key-form">
+                    <div class="input-group">
+                        <label for="newKeyInput">Nova Register Key</label>
+                        <input type="text" id="newKeyInput" placeholder="Cole aqui a Register Key">
+                    </div>
+                    <div class="input-group">
+                        <label for="bulkKeysInput">Adicionar em Lote (uma por linha)</label>
+                        <textarea id="bulkKeysInput" rows="4" placeholder="Cole várias keys aqui, uma por linha..."></textarea>
+                    </div>
+                    <div class="form-actions">
+                        <button id="addSingleBtn" class="btn btn-primary">Adicionar Key</button>
+                        <button id="addBulkBtn" class="btn btn-secondary">Adicionar em Lote</button>
+                    </div>
+                    <div id="addFeedback" class="feedback hidden"></div>
+                </div>
+            </section>
+
+            <!-- Seção: URL do Gerador -->
+            <section class="panel-section">
+                <div class="section-header">
+                    <h3><span class="section-icon">🔗</span> URL do Gerador</h3>
+                </div>
+                <div class="generator-url-box">
+                    <div class="url-display">
+                        <input type="text" id="generatorUrl" class="url-input" readonly placeholder="Carregando URL do gerador...">
+                        <button id="copyUrlBtn" class="btn btn-icon" title="Copiar URL">
+                            <span id="copyIcon">📋</span>
+                        </button>
+                    </div>
+                    <p class="url-hint">Compartilhe essa URL com os usuários para eles gerarem uma Register Key</p>
+                </div>
+            </section>
+
+            <!-- Filtros -->
+            <section class="panel-section">
+                <div class="section-header">
+                    <h3><span class="section-icon">📋</span> Todas as Keys</h3>
+                    <div class="filter-tabs">
+                        <button class="filter-tab active" data-filter="all">Todas</button>
+                        <button class="filter-tab" data-filter="available">Disponíveis</button>
+                        <button class="filter-tab" data-filter="used">Usadas</button>
+                    </div>
+                </div>
+                <div class="keys-table-wrapper">
+                    <table class="keys-table">
+                        <thead>
+                            <tr>
+                                <th>Register Key</th>
+                                <th>Status</th>
+                                <th>Data de Criação</th>
+                                <th>Data de Uso</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody id="keysTableBody">
+                            <tr class="loading-row">
+                                <td colspan="5">
+                                    <div class="table-loading">
+                                        <div class="spinner"></div>
+                                        <span>Carregando keys...</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div id="emptyState" class="empty-state hidden">
+                    <div class="empty-icon">📭</div>
+                    <p>Nenhuma key encontrada</p>
+                    <p class="empty-hint">Adicione Register Keys acima para começar</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Toast de Notificação -->
+    <div id="toast" class="toast hidden">
+        <span id="toastMessage"></span>
+    </div>
+
+    <!-- Modal de Confirmação -->
+    <div id="confirmModal" class="modal hidden">
+        <div class="modal-overlay"></div>
+        <div class="modal-content">
+            <h3>Confirmar Exclusão</h3>
+            <p>Tem certeza que deseja excluir esta Register Key?</p>
+            <p class="modal-key-display" id="modalKeyText"></p>
+            <div class="modal-actions">
+                <button id="confirmDeleteBtn" class="btn btn-danger">Excluir</button>
+                <button id="cancelDeleteBtn" class="btn btn-outline">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+        import {
+            getAuth,
+            signInWithEmailAndPassword,
+            signOut,
+            onAuthStateChanged,
+            createUserWithEmailAndPassword
+        } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+        import {
+            getFirestore,
+            collection,
+            addDoc,
+            getDocs,
+            doc,
+            updateDoc,
+            deleteDoc,
+            query,
+            orderBy,
+            serverTimestamp,
+            onSnapshot,
+            runTransaction,
+            where
+        } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+        // ============================================
+        // CONFIGURAÇÃO DO FIREBASE
+        // Substitua os valores abaixo pela sua configuração do Firebase
+        // ============================================
+        const firebaseConfig = {
+            apiKey: "SUA_API_KEY",
+            authDomain: "SEU_PROJETO.firebaseapp.com",
+            projectId: "SEU_PROJETO",
+            storageBucket: "SEU_PROJETO.appspot.com",
+            messagingSenderId: "SEU_SENDER_ID",
+            appId: "SEU_APP_ID"
+        };
+
+        // Inicializar Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const keysCollection = collection(db, "registerKeys");
+
+        // ============================================
+        // VARIÁVEIS DE ESTADO
+        // ============================================
+        let allKeys = [];
+        let currentFilter = "all";
+        let deletingKeyId = null;
+
+        // ============================================
+        // ELEMENTOS DOM
+        // ============================================
+        const loginScreen = document.getElementById("loginScreen");
+        const adminScreen = document.getElementById("adminScreen");
+        const loginForm = document.getElementById("loginForm");
+        const loginLoading = document.getElementById("loginLoading");
+        const loginBtn = document.getElementById("loginBtn");
+        const loginError = document.getElementById("loginError");
+        const logoutBtn = document.getElementById("logoutBtn");
+        const addSingleBtn = document.getElementById("addSingleBtn");
+        const addBulkBtn = document.getElementById("addBulkBtn");
+        const keysTableBody = document.getElementById("keysTableBody");
+        const emptyState = document.getElementById("emptyState");
+        const toast = document.getElementById("toast");
+        const confirmModal = document.getElementById("confirmModal");
+        const confirmDeleteBtn = document.getElementById("confirmDeleteBtn");
+        const cancelDeleteBtn = document.getElementById("cancelDeleteBtn");
+        const copyUrlBtn = document.getElementById("copyUrlBtn");
+        const copyIcon = document.getElementById("copyIcon");
+
+        // ============================================
+        // AUTENTICAÇÃO
+        // ============================================
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // Usuário autenticado - mostrar painel
+                loginScreen.classList.remove("active");
+                adminScreen.classList.add("active");
+                document.getElementById("adminEmail").textContent = user.email;
+                loadKeys();
+            } else {
+                // Não autenticado - mostrar login
+                loginScreen.classList.add("active");
+                adminScreen.classList.remove("active");
+            }
+        });
+
+        // Login
+        loginBtn.addEventListener("click", async () => {
+            const email = document.getElementById("loginEmail").value.trim();
+            const password = document.getElementById("loginPassword").value;
+
+            if (!email || !password) {
+                loginError.textContent = "Preencha e-mail e senha";
+                loginError.classList.remove("hidden");
+                return;
+            }
+
+            loginForm.classList.add("hidden");
+            loginLoading.classList.remove("hidden");
+            loginError.classList.add("hidden");
+
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+            } catch (error) {
+                loginForm.classList.remove("hidden");
+                loginLoading.classList.add("hidden");
+
+                if (error.code === "auth/user-not-found" || error.code === "auth/wrong-password" || error.code === "auth/invalid-credential") {
+                    loginError.textContent = "E-mail ou senha incorretos";
+                } else if (error.code === "auth/invalid-email") {
+                    loginError.textContent = "E-mail inválido";
+                } else if (error.code === "auth/invalid-api-key" || error.code === "auth/api-key-not-found") {
+                    loginError.textContent = "Erro na configuração do Firebase. Verifique as credenciais.";
+                } else {
+                    loginError.textContent = "Erro ao entrar: " + error.message;
+                }
+                loginError.classList.remove("hidden");
+            }
+        });
+
+        // Logout
+        logoutBtn.addEventListener("click", async () => {
+            try {
+                await signOut(auth);
+            } catch (error) {
+                showToast("Erro ao sair: " + error.message, "error");
+            }
+        });
+
+        // ============================================
+        // GERENCIAMENTO DE KEYS
+        // ============================================
+
+        // Carregar keys em tempo real
+        function loadKeys() {
+            const q = query(keysCollection, orderBy("createdAt", "desc"));
+            onSnapshot(q, (snapshot) => {
+                allKeys = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                updateStats();
+                renderKeys();
+            });
+        }
+
+        // Atualizar estatísticas
+        function updateStats() {
+            const total = allKeys.length;
+            const available = allKeys.filter(k => k.status === "available").length;
+            const used = allKeys.filter(k => k.status === "used").length;
+
+            animateCounter("totalCount", total);
+            animateCounter("availableCount", available);
+            animateCounter("usedCount", used);
+        }
+
+        // Animação de contador
+        function animateCounter(elementId, target) {
+            const el = document.getElementById(elementId);
+            const current = parseInt(el.textContent) || 0;
+            if (current === target) return;
+
+            const duration = 300;
+            const step = (target - current) / (duration / 16);
+            let value = current;
+
+            const timer = setInterval(() => {
+                value += step;
+                if ((step > 0 && value >= target) || (step < 0 && value <= target)) {
+                    value = target;
+                    clearInterval(timer);
+                }
+                el.textContent = Math.round(value);
+            }, 16);
+        }
+
+        // Renderizar tabela de keys
+        function renderKeys() {
+            let filtered = allKeys;
+            if (currentFilter === "available") {
+                filtered = allKeys.filter(k => k.status === "available");
+            } else if (currentFilter === "used") {
+                filtered = allKeys.filter(k => k.status === "used");
+            }
+
+            if (filtered.length === 0) {
+                keysTableBody.innerHTML = "";
+                emptyState.classList.remove("hidden");
+                return;
+            }
+
+            emptyState.classList.add("hidden");
+            keysTableBody.innerHTML = filtered.map(key => {
+                const statusClass = key.status === "available" ? "status-available" : "status-used";
+                const statusText = key.status === "available" ? "Disponível" : "Usada";
+                const statusIcon = key.status === "available" ? "🟢" : "🔴";
+                const createdAt = key.createdAt ? formatDate(key.createdAt) : "-";
+                const usedAt = key.usedAt ? formatDate(key.usedAt) : "-";
+
+                return `
+                    <tr>
+                        <td><code class="key-code">${escapeHtml(key.key)}</code></td>
+                        <td><span class="status-badge ${statusClass}">${statusIcon} ${statusText}</span></td>
+                        <td>${createdAt}</td>
+                        <td>${usedAt}</td>
+                        <td>
+                            <button class="btn btn-icon btn-danger-sm delete-btn" data-id="${key.id}" title="Excluir">
+                                🗑️
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join("");
+
+            // Adicionar event listeners para botões de excluir
+            document.querySelectorAll(".delete-btn").forEach(btn => {
+                btn.addEventListener("click", () => {
+                    deletingKeyId = btn.dataset.id;
+                    const key = allKeys.find(k => k.id === deletingKeyId);
+                    if (key) {
+                        document.getElementById("modalKeyText").textContent = key.key;
+                    }
+                    confirmModal.classList.remove("hidden");
+                });
+            });
+        }
+
+        // Adicionar key individual
+        addSingleBtn.addEventListener("click", async () => {
+            const keyInput = document.getElementById("newKeyInput");
+            const keyValue = keyInput.value.trim();
+
+            if (!keyValue) {
+                showFeedback("Digite uma Register Key", "error");
+                return;
+            }
+
+            // Verificar se a key já existe
+            const exists = allKeys.find(k => k.key === keyValue);
+            if (exists) {
+                showFeedback("Esta key já existe no sistema", "error");
+                return;
+            }
+
+            addSingleBtn.disabled = true;
+            addSingleBtn.textContent = "Adicionando...";
+
+            try {
+                await addDoc(keysCollection, {
+                    key: keyValue,
+                    status: "available",
+                    createdAt: serverTimestamp(),
+                    usedAt: null
+                });
+                keyInput.value = "";
+                showFeedback("Key adicionada com sucesso!", "success");
+            } catch (error) {
+                showFeedback("Erro ao adicionar: " + error.message, "error");
+            } finally {
+                addSingleBtn.disabled = false;
+                addSingleBtn.textContent = "Adicionar Key";
+            }
+        });
+
+        // Adicionar keys em lote
+        addBulkBtn.addEventListener("click", async () => {
+            const textarea = document.getElementById("bulkKeysInput");
+            const lines = textarea.value.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+
+            if (lines.length === 0) {
+                showFeedback("Cole as keys no campo de texto", "error");
+                return;
+            }
+
+            // Filtrar keys duplicadas
+            const newKeys = lines.filter(l => !allKeys.find(k => k.key === l));
+            if (newKeys.length === 0) {
+                showFeedback("Todas as keys já existem no sistema", "error");
+                return;
+            }
+
+            addBulkBtn.disabled = true;
+            addBulkBtn.textContent = "Adicionando...";
+
+            let added = 0;
+            let errors = 0;
+
+            try {
+                for (const keyValue of newKeys) {
+                    try {
+                        await addDoc(keysCollection, {
+                            key: keyValue,
+                            status: "available",
+                            createdAt: serverTimestamp(),
+                            usedAt: null
+                        });
+                        added++;
+                    } catch (err) {
+                        errors++;
+                    }
+                }
+
+                textarea.value = "";
+                if (errors === 0) {
+                    showFeedback(`${added} key(s) adicionada(s) com sucesso!`, "success");
+                } else {
+                    showFeedback(`${added} adicionada(s), ${errors} erro(s)`, "error");
+                }
+            } finally {
+                addBulkBtn.disabled = false;
+                addBulkBtn.textContent = "Adicionar em Lote";
+            }
+        });
+
+        // Excluir key
+        confirmDeleteBtn.addEventListener("click", async () => {
+            if (!deletingKeyId) return;
+
+            try {
+                await deleteDoc(doc(db, "registerKeys", deletingKeyId));
+                showToast("Key excluída com sucesso", "success");
+            } catch (error) {
+                showToast("Erro ao excluir: " + error.message, "error");
+            } finally {
+                confirmModal.classList.add("hidden");
+                deletingKeyId = null;
+            }
+        });
+
+        cancelDeleteBtn.addEventListener("click", () => {
+            confirmModal.classList.add("hidden");
+            deletingKeyId = null;
+        });
+
+        // ============================================
+        // FILTROS
+        // ============================================
+        document.querySelectorAll(".filter-tab").forEach(tab => {
+            tab.addEventListener("click", () => {
+                document.querySelectorAll(".filter-tab").forEach(t => t.classList.remove("active"));
+                tab.classList.add("active");
+                currentFilter = tab.dataset.filter;
+                renderKeys();
+            });
+        });
+
+        // ============================================
+        // URL DO GERADOR
+        // ============================================
+        copyUrlBtn.addEventListener("click", () => {
+            const urlInput = document.getElementById("generatorUrl");
+            const url = urlInput.value;
+
+            if (!url || url.includes("Carregando")) {
+                showToast("URL ainda não carregada", "error");
+                return;
+            }
+
+            navigator.clipboard.writeText(url).then(() => {
+                copyIcon.textContent = "✅";
+                showToast("URL copiada!", "success");
+                setTimeout(() => { copyIcon.textContent = "📋"; }, 2000);
+            }).catch(() => {
+                showToast("Erro ao copiar URL", "error");
+            });
+        });
+
+        // Atualizar URL do gerador
+        function updateGeneratorUrl() {
+            const base = window.location.origin;
+            const path = window.location.pathname.replace(/\/[^/]*$/, "");
+            const generatorUrl = `${base}${path}/index.html`;
+            document.getElementById("generatorUrl").value = generatorUrl;
+        }
+
+        updateGeneratorUrl();
+
+        // ============================================
+        // UTILITÁRIOS
+        // ============================================
+        function showToast(message, type = "info") {
+            const toastEl = document.getElementById("toast");
+            const toastMsg = document.getElementById("toastMessage");
+            toastMsg.textContent = message;
+            toastEl.className = `toast toast-${type}`;
+            toastEl.classList.remove("hidden");
+            setTimeout(() => { toastEl.classList.add("hidden"); }, 3000);
+        }
+
+        function showFeedback(message, type = "info") {
+            const feedback = document.getElementById("addFeedback");
+            feedback.textContent = message;
+            feedback.className = `feedback feedback-${type}`;
+            feedback.classList.remove("hidden");
+            setTimeout(() => { feedback.classList.add("hidden"); }, 4000);
+        }
+
+        function formatDate(timestamp) {
+            if (!timestamp) return "-";
+            const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+            return date.toLocaleDateString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Fechar modal ao clicar no overlay
+        document.querySelector(".modal-overlay").addEventListener("click", () => {
+            confirmModal.classList.add("hidden");
+            deletingKeyId = null;
+        });
+
+        // Enter no campo de login
+        document.getElementById("loginPassword").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") loginBtn.click();
+        });
+
+        // Enter no campo de key
+        document.getElementById("newKeyInput").addEventListener("keydown", (e) => {
+            if (e.key === "Enter") addSingleBtn.click();
+        });
+    </script>
+</body>
+</html>

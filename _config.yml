@@ -1,0 +1,6 @@
+# GitHub Pages Configuration
+# Este arquivo é necessário para que o GitHub Pages reconheça o repositório
+# e publique o site como página estática.
+
+# Não é necessário configurar nada aqui para sites estáticos simples.
+# Apenas a presença deste arquivo sinaliza ao GitHub que deve ativar o Pages.

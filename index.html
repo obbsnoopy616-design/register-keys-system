@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Register Keys</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Etapa 1: Verificação -->
+    <div id="verifyScreen" class="screen active">
+        <div class="generator-container">
+            <div class="generator-box">
+                <div class="logo">
+                    <div class="logo-icon">🔑</div>
+                    <h1>Gerador de Register Keys</h1>
+                    <p>Verificação de Acesso</p>
+                </div>
+
+                <div id="verifyStep1">
+                    <p class="verify-text">Para gerar uma Register Key, clique no botão abaixo para verificar o acesso ao sistema.</p>
+                    <button id="verifyBtn" class="btn btn-primary btn-full btn-lg">
+                        <span class="btn-text">Verificar Acesso</span>
+                    </button>
+                </div>
+
+                <div id="verifyStep2" class="hidden">
+                    <div class="verify-loading">
+                        <div class="spinner"></div>
+                        <p>Verificando acesso ao sistema...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Etapa 2: Gerador -->
+    <div id="generatorScreen" class="screen">
+        <div class="generator-container">
+            <div class="generator-box">
+                <div class="logo">
+                    <div class="logo-icon">🔑</div>
+                    <h1>Gerador de Register Keys</h1>
+                    <p>Gere sua key de registro</p>
+                </div>
+
+                <div class="generator-info">
+                    <div class="info-card">
+                        <span class="info-icon">ℹ️</span>
+                        <p>
+                            <strong>Como funciona:</strong> Clique no botão abaixo para gerar uma Register Key válida.
+                            Cada key é única e só pode ser usada uma vez.
+                        </p>
+                    </div>
+                    <div class="info-card available-badge">
+                        <span class="info-icon">📦</span>
+                        <p><strong>Keys disponíveis:</strong> <span id="availableKeysCount">...</span></p>
+                    </div>
+                </div>
+
+                <button id="generateBtn" class="btn btn-primary btn-full btn-lg generate-btn">
+                    <span class="btn-text">⚡ GERAR REGISTER KEY</span>
+                </button>
+
+                <div id="generatorLoading" class="hidden">
+                    <div class="verify-loading">
+                        <div class="spinner"></div>
+                        <p>Gerando sua Register Key...</p>
+                    </div>
+                </div>
+
+                <!-- Resultado -->
+                <div id="resultBox" class="result-box hidden">
+                    <div class="result-header">
+                        <span class="result-icon">✅</span>
+                        <h3>Register Key Gerada!</h3>
+                    </div>
+                    <div class="result-content">
+                        <code class="result-key" id="resultKey"></code>
+                        <button id="copyKeyBtn" class="btn btn-secondary btn-full">
+                            📋 Copiar Register Key
+                        </button>
+                    </div>
+                    <div class="result-footer">
+                        <p class="result-warning">⚠️ Esta key já foi marcada como utilizada. Não será entregue novamente.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tela de Erro -->
+    <div id="errorScreen" class="screen">
+        <div class="generator-container">
+            <div class="generator-box">
+                <div class="logo">
+                    <div class="logo-icon">⚠️</div>
+                    <h1>Indisponível</h1>
+                </div>
+                <div class="error-content">
+                    <p class="error-text" id="errorMessage">Nenhuma Register Key disponível no momento.</p>
+                    <p class="error-hint">Tente novamente mais tarde ou entre em contato com o administrador.</p>
+                    <button id="retryBtn" class="btn btn-primary btn-full" style="margin-top: 20px;">Voltar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast hidden">
+        <span id="toastMessage"></span>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+        import {
+            getFirestore,
+            collection,
+            query,
+            where,
+            limit,
+            getDocs,
+            doc,
+            updateDoc,
+            serverTimestamp
+        } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+        // ============================================
+        // CONFIGURAÇÃO DO FIREBASE
+        // Substitua os valores abaixo pela sua configuração do Firebase
+        // ============================================
+        const firebaseConfig = {
+            apiKey: "SUA_API_KEY",
+            authDomain: "SEU_PROJETO.firebaseapp.com",
+            projectId: "SEU_PROJETO",
+            storageBucket: "SEU_PROJETO.appspot.com",
+            messagingSenderId: "SEU_SENDER_ID",
+            appId: "SEU_APP_ID"
+        };
+
+        // Inicializar Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const keysCollection = collection(db, "registerKeys");
+
+        // ============================================
+        // ELEMENTOS DOM
+        // ============================================
+        const verifyScreen = document.getElementById("verifyScreen");
+        const generatorScreen = document.getElementById("generatorScreen");
+        const errorScreen = document.getElementById("errorScreen");
+        const verifyBtn = document.getElementById("verifyBtn");
+        const verifyStep2 = document.getElementById("verifyStep2");
+        const generateBtn = document.getElementById("generateBtn");
+        const generatorLoading = document.getElementById("generatorLoading");
+        const resultBox = document.getElementById("resultBox");
+        const resultKey = document.getElementById("resultKey");
+        const copyKeyBtn = document.getElementById("copyKeyBtn");
+        const retryBtn = document.getElementById("retryBtn");
+        const errorMessage = document.getElementById("errorMessage");
+
+        let isGenerating = false;
+
+        // ============================================
+        // ETAPA 1: VERIFICAÇÃO
+        // ============================================
+        verifyBtn.addEventListener("click", async () => {
+            document.getElementById("verifyStep1").classList.add("hidden");
+            verifyStep2.classList.remove("hidden");
+
+            // Verificar se há keys disponíveis
+            try {
+                const q = query(keysCollection, where("status", "==", "available"), limit(1));
+                const snapshot = await getDocs(q);
+
+                // Aguardar para efeito visual
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                if (snapshot.empty) {
+                    showScreen(errorScreen);
+                    errorMessage.textContent = "Nenhuma Register Key disponível no momento.";
+                    return;
+                }
+
+                // Atualizar contador
+                const totalQuery = query(keysCollection, where("status", "==", "available"));
+                const totalSnapshot = await getDocs(totalQuery);
+                document.getElementById("availableKeysCount").textContent = totalSnapshot.size;
+
+                showScreen(generatorScreen);
+            } catch (error) {
+                showScreen(errorScreen);
+                errorMessage.textContent = "Erro ao verificar: " + error.message;
+            }
+        });
+
+        // ============================================
+        // ETAPA 2: GERAR KEY (com proteção contra race conditions)
+        // ============================================
+        generateBtn.addEventListener("click", async () => {
+            if (isGenerating) return;
+            isGenerating = true;
+
+            generateBtn.disabled = true;
+            generateBtn.classList.add("hidden");
+            generatorLoading.classList.remove("hidden");
+
+            try {
+                // Usar transação para garantir que apenas um usuário receba a key
+                const availableQuery = query(
+                    keysCollection,
+                    where("status", "==", "available"),
+                    limit(1)
+                );
+
+                const snapshot = await getDocs(availableQuery);
+
+                if (snapshot.empty) {
+                    showScreen(errorScreen);
+                    errorMessage.textContent = "Nenhuma Register Key disponível. Todas já foram utilizadas.";
+                    isGenerating = false;
+                    return;
+                }
+
+                // Pegar a primeira key disponível
+                const keyDoc = snapshot.docs[0];
+                const keyData = keyDoc.data();
+
+                // Marcar como usada via transação (proteção contra race conditions)
+                const keyRef = doc(db, "registerKeys", keyDoc.id);
+                const db = getFirestore(app);
+
+                // Transação atômica para marcar como usada
+                const { runTransaction } = await import("https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js");
+
+                await runTransaction(db, async (transaction) => {
+                    const currentDoc = await transaction.get(keyRef);
+
+                    if (!currentDoc.exists()) {
+                        throw new Error("Key não encontrada");
+                    }
+
+                    if (currentDoc.data().status !== "available") {
+                        throw new Error("Key já foi utilizada por outro usuário");
+                    }
+
+                    transaction.update(keyRef, {
+                        status: "used",
+                        usedAt: serverTimestamp(),
+                        generatedAt: serverTimestamp()
+                    });
+                });
+
+                // Aguardar para efeito visual
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                // Mostrar resultado
+                resultKey.textContent = keyData.key;
+                resultBox.classList.remove("hidden");
+
+                // Esconder botão de gerar
+                generateBtn.classList.add("hidden");
+
+            } catch (error) {
+                console.error("Erro ao gerar key:", error);
+
+                if (error.message.includes("utilizada por outro")) {
+                    // Tentar novamente - outra pessoa pegou a key
+                    showScreen(errorScreen);
+                    errorMessage.textContent = "Esta key acabou de ser gerada. Tente novamente.";
+                } else {
+                    showScreen(errorScreen);
+                    errorMessage.textContent = "Erro ao gerar: " + error.message;
+                }
+            }
+        });
+
+        // ============================================
+        // COPIAR KEY
+        // ============================================
+        copyKeyBtn.addEventListener("click", () => {
+            const keyText = resultKey.textContent;
+            navigator.clipboard.writeText(keyText).then(() => {
+                showToast("Register Key copiada!", "success");
+            }).catch(() => {
+                // Fallback
+                const textArea = document.createElement("textarea");
+                textArea.value = keyText;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textArea);
+                showToast("Register Key copiada!", "success");
+            });
+        });
+
+        // ============================================
+        // RETORNAR AO INÍCIO
+        // ============================================
+        retryBtn.addEventListener("click", () => {
+            showScreen(verifyScreen);
+            document.getElementById("verifyStep1").classList.remove("hidden");
+            verifyStep2.classList.add("hidden");
+            resultBox.classList.add("hidden");
+            generateBtn.classList.remove("hidden", "disabled");
+            generateBtn.disabled = false;
+            isGenerating = false;
+        });
+
+        // ============================================
+        // UTILITÁRIOS
+        // ============================================
+        function showScreen(screen) {
+            document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+            screen.classList.add("active");
+        }
+
+        function showToast(message, type = "info") {
+            const toastEl = document.getElementById("toast");
+            const toastMsg = document.getElementById("toastMessage");
+            toastMsg.textContent = message;
+            toastEl.className = `toast toast-${type}`;
+            toastEl.classList.remove("hidden");
+            setTimeout(() => { toastEl.classList.add("hidden"); }, 3000);
+        }
+
+        // Verificar se há keys disponíveis ao carregar a página
+        (async () => {
+            try {
+                const q = query(keysCollection, where("status", "==", "available"), limit(1));
+                const snapshot = await getDocs(q);
+                const totalQuery = query(keysCollection, where("status", "==", "available"));
+                const totalSnapshot = await getDocs(totalQuery);
+                document.getElementById("availableKeysCount").textContent = totalSnapshot.size;
+            } catch (error) {
+                console.log("Erro ao carregar contador:", error.message);
+            }
+        })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# Arquivos temporários
+*.tmp
+*.log
+
+# Diretórios do sistema
+.DS_Store
+Thumbs.db
+
+# Arquivos de configuração local (não commitar chaves reais)
+# .env
