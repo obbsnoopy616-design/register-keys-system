@@ -1,76 +1,32 @@
 # Guia de Configuração: Register Keys System
 
-Este documento contém as instruções passo a passo para configurar o Firebase, criar o banco de dados, configurar o usuário administrador e publicar o site utilizando o GitHub Pages.
+Este documento contém as instruções passo a passo para configurar o backend, criar o usuário administrador e publicar o site utilizando o GitHub Pages.
 
-## Passo 1: Configuração do Firebase
+## Passo 1: Deployando o Backend (Render.com)
 
-O Firebase será utilizado para armazenar as Register Keys e gerenciar o acesso do administrador.
+O backend gerencia as chaves e o login do administrador. Vamos hospedá-lo gratuitamente no Render.com.
 
-1. Acesse o [Console do Firebase](https://console.firebase.google.com/) e clique em **Adicionar projeto**.
-2. Dê um nome ao seu projeto (ex: `register-keys-system`) e siga as instruções para concluí-lo.
-3. Após a criação do projeto, clique no ícone do **Web** (representado por `</>`) para adicionar um aplicativo web.
-4. Dê um apelido ao aplicativo (ex: `site`) e registre-o.
-5. **Importante:** O Firebase fornecerá um bloco de código contendo as credenciais (`apiKey`, `authDomain`, `projectId`, etc.). Copie esse bloco, pois você precisará dele nos próximos passos.
+1. Acesse [Render.com](https://render.com/) e crie uma conta gratuita (pode usar sua conta do GitHub).
+2. Clique em **New** > **Web Service**.
+3. Conecte sua conta do GitHub e selecione o repositório `register-keys-system`.
+4. Configure o Web Service:
+   - **Name:** `register-keys-api`
+   - **Region:** `Oregon` (ou a mais próxima)
+   - **Branch:** `main`
+   - **Runtime:** `Node`
+   - **Build Command:** `cd server && npm install`
+   - **Start Command:** `cd server && node server.js`
+   - **Instance Type:** `Free`
+5. Clique em **Advanced** e adicione as seguintes variáveis de ambiente:
+   - `ADMIN_EMAIL`: O e-mail que você quer usar para entrar no Painel ADM (ex: `admin@meusite.com`).
+   - `ADMIN_PASSWORD`: A senha que você quer usar para entrar no Painel ADM (ex: `minhasenha123`).
+   - `JWT_SECRET`: Uma chave secreta aleatória (pode digitar qualquer coisa aleatória, ex: `chave-super-secreta-123`).
+6. Clique em **Create Web Service**.
+7. Aguarde o deploy terminar. Ao finalizar, o Render fornecerá uma URL para o seu backend (ex: `https://register-keys-api.onrender.com`). **Copie essa URL**, você precisará dela no próximo passo.
 
-## Passo 2: Configuração do Banco de Dados (Realtime Database)
+## Passo 2: Publicando o Frontend no GitHub Pages
 
-O Realtime Database será o banco de dados onde as Register Keys serão armazenadas.
-
-1. No menu lateral esquerdo do Console do Firebase, clique em **Criação** > **Realtime Database**.
-2. Clique em **Criar banco de dados**.
-3. Escolha o local mais próximo de você (ex: `southamerica-east1` para Brasil).
-4. Selecione **Iniciar no modo de teste** e clique em **Ativar**.
-5. **Regras de Segurança:** Vá na aba **Regras** do Realtime Database e substitua as regras padrão pelas regras abaixo. Essas regras garantem que o Gerador (público) possa ler as keys, mas apenas o Painel ADM (autenticado) possa ler e escrever no banco:
-
-```json
-{
-  "rules": {
-    "registerKeys": {
-      ".read": true,
-      ".write": "auth != null"
-    }
-  }
-}
-```
-*Clique em **Publicar** para salvar as regras.*
-
-## Passo 3: Configuração da Autenticação (Firebase Auth)
-
-A autenticação será usada para proteger o Painel ADM.
-
-1. No menu lateral esquerdo do Console do Firebase, clique em **Criação** > **Authentication**.
-2. Clique em **Vamos começar**.
-3. Na aba **Provedores de login**, clique em **Adicionar novo provedor**.
-4. Escolha **E-mail/senha** e ative a opção de **E-mail/senha**. Salve.
-5. Ainda na aba **Authentication**, clique em **Usuários** e depois em **Adicionar usuário**.
-6. Crie o e-mail e a senha que você usará para acessar o Painel ADM (ex: `admin@meusite.com` / `minhasenha123`).
-7. Clique em **Adicionar usuário**.
-
-## Passo 4: Atualizando as Credenciais no Código
-
-Você precisa inserir as credenciais do Firebase nos arquivos do projeto para que eles possam se comunicar com o banco de dados.
-
-1. Abra o arquivo `admin.html` no seu projeto.
-2. Localize a seção `firebaseConfig`:
-
-```javascript
-const firebaseConfig = {
-    apiKey: "SUA_API_KEY",
-    authDomain: "SEU_PROJETO.firebaseapp.com",
-    databaseURL: "https://SEU_PROJETO-default-rtdb.firebaseio.com",
-    projectId: "SEU_PROJETO",
-    storageBucket: "SEU_PROJETO.appspot.com",
-    messagingSenderId: "SEU_SENDER_ID",
-    appId: "SEU_APP_ID"
-};
-```
-
-3. Substitua os valores (`SUA_API_KEY`, etc.) pelas credenciais que você copiou no Passo 1.
-4. Abra o arquivo `index.html` e faça exatamente a mesma substituição na seção `firebaseConfig`.
-
-## Passo 5: Publicando no GitHub Pages
-
-O GitHub Pages permitirá que você hospede o site gratuitamente.
+O GitHub Pages hospedará as páginas do Painel ADM e do Gerador.
 
 1. Certifique-se de que todos os arquivos estão no seu repositório do GitHub.
 2. Acesse o seu repositório no GitHub.
@@ -79,14 +35,18 @@ O GitHub Pages permitirá que você hospede o site gratuitamente.
 5. Em **Source**, certifique-se de que está selecionada a opção **Deploy from a branch**.
 6. Em **Branch**, selecione a branch **main** (ou master) e a pasta **/ (root)**.
 7. Clique em **Save** (Salvar).
+8. O GitHub fornecerá um link na parte superior da página (ex: `https://seu-usuario.github.io/register-keys-system/`).
 
-O GitHub irá processar a publicação. Em alguns minutos, ele fornecerá um link na parte superior da página (ex: `https://seu-usuario.github.io/nome-do-repositorio/`).
+## Passo 3: Configurando o Painel ADM
 
-## Passo 6: Utilizando o Sistema
+1. Acesse a URL do seu Painel ADM (ex: `https://seu-usuario.github.io/register-keys-system/admin.html`).
+2. No formulário de login, haverá um campo chamado **URL da API**. Cole a URL do backend que você copiou no Render.com (ex: `https://register-keys-api.onrender.com`).
+3. A URL será salva automaticamente no seu navegador.
+4. Insira o e-mail e a senha que você configurou nas variáveis de ambiente no Render.com (`ADMIN_EMAIL` e `ADMIN_PASSWORD`).
+5. Clique em **Entrar**.
 
-1. Acesse o link do seu site no navegador.
-2. Adicione `/admin.html` ao final da URL para acessar o painel (ex: `https://seu-usuario.github.io/nome-do-repositorio/admin.html`).
-3. Faça login com o e-mail e senha criados no Passo 3.
-4. No Painel ADM, adicione algumas Register Keys usando o campo de texto ou o lote.
-5. Copie a "URL do Gerador" exibida no painel.
-6. Compartilhe essa URL com os usuários. Quando eles acessarem, passarão pela verificação e poderão gerar uma key, que será automaticamente marcada como usada no Firebase.
+## Passo 4: Compartilhando o Gerador
+
+1. Dentro do Painel ADM, você verá a seção **URL do Gerador**.
+2. Copie essa URL. O sistema está configurado para passar automaticamente a URL da API para os usuários.
+3. Compartilhe essa URL com os usuários. Eles poderão verificar se há chaves disponíveis e gerar novas chaves, que serão registradas automaticamente no seu backend no Render.com.

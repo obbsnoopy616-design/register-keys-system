@@ -120,6 +120,20 @@
                 </div>
             </section>
 
+            <!-- Seção: Configuração da API -->
+            <section class="panel-section">
+                <div class="section-header">
+                    <h3><span class="section-icon">⚙️</span> URL da API</h3>
+                </div>
+                <div class="add-key-form">
+                    <div class="input-group">
+                        <label for="apiUrlInput">URL do Backend (Render.com ou servidor)</label>
+                        <input type="text" id="apiUrlInput" placeholder="https://sua-api.onrender.com">
+                    </div>
+                    <p class="url-hint">Insira a URL do seu servidor backend. Salva automaticamente no navegador.</p>
+                </div>
+            </section>
+
             <!-- Filtros -->
             <section class="panel-section">
                 <div class="section-header">
@@ -181,52 +195,30 @@
         </div>
     </div>
 
-    <!-- Firebase SDK (Realtime Database) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-        import {
-            getAuth,
-            signInWithEmailAndPassword,
-            signOut,
-            onAuthStateChanged
-        } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
-        import {
-            getDatabase,
-            ref,
-            push,
-            set,
-            remove,
-            onValue,
-            update,
-            runTransaction
-        } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-
+    <script>
         // ============================================
-        // CONFIGURAÇÃO DO FIREBASE
+        // CONFIGURAÇÃO DA API
         // ============================================
-        const firebaseConfig = {
-            apiKey: "AIzaSyBhsVfsNup8T6pt6F4YNSnTRGGDVeWdwV0",
-            authDomain: "snoopy-obb-a2742.firebaseapp.com",
-            databaseURL: "https://snoopy-obb-a2742-default-rtdb.firebaseio.com",
-            projectId: "snoopy-obb-a2742",
-            storageBucket: "snoopy-obb-a2742.firebasestorage.app",
-            messagingSenderId: "671954206476",
-            appId: "1:671954206476:web:da3d769adc3441024e9329"
-        };
+        let API_URL = localStorage.getItem("apiUrl") || "";
 
-        // Inicializar Firebase
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getDatabase(app);
-        const keysRef = ref(db, "registerKeys");
+        // Salvar URL da API quando o usuário digitar
+        document.getElementById("apiUrlInput").addEventListener("input", (e) => {
+            API_URL = e.target.value.trim().replace(/\/$/, "");
+            localStorage.setItem("apiUrl", API_URL);
+        });
+
+        // Carregar URL salva
+        if (API_URL) {
+            document.getElementById("apiUrlInput").value = API_URL;
+        }
 
         // ============================================
         // VARIÁVEIS DE ESTADO
         // ============================================
-        let allKeys = {};
+        let authToken = localStorage.getItem("authToken") || null;
+        let allKeys = [];
         let currentFilter = "all";
-        let deletingKeyRef = null;
-        let currentUser = null;
+        let deletingKeyId = null;
 
         // ============================================
         // ELEMENTOS DOM
@@ -251,24 +243,54 @@
         // ============================================
         // AUTENTICAÇÃO
         // ============================================
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                loginScreen.classList.remove("active");
-                adminScreen.classList.add("active");
-                document.getElementById("adminEmail").textContent = user.email;
-                loadKeys();
-            } else {
-                currentUser = null;
-                loginScreen.classList.add("active");
-                adminScreen.classList.remove("active");
+
+        // Verificar token ao carregar
+        async function checkAuth() {
+            if (!authToken || !API_URL) {
+                showLoginScreen();
+                return;
             }
-        });
+
+            try {
+                const res = await fetch(API_URL + "/api/me", {
+                    headers: { "Authorization": "Bearer " + authToken }
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    showAdminScreen(data.email);
+                } else {
+                    logout();
+                }
+            } catch (err) {
+                console.error("Erro ao verificar auth:", err);
+                showLoginScreen();
+            }
+        }
+
+        function showLoginScreen() {
+            loginScreen.classList.add("active");
+            adminScreen.classList.remove("active");
+        }
+
+        function showAdminScreen(email) {
+            loginScreen.classList.remove("active");
+            adminScreen.classList.add("active");
+            document.getElementById("adminEmail").textContent = email;
+            loadKeys();
+            loadStats();
+        }
 
         // Login
         loginBtn.addEventListener("click", async () => {
             const email = document.getElementById("loginEmail").value.trim();
             const password = document.getElementById("loginPassword").value;
+
+            if (!API_URL) {
+                loginError.textContent = "Configure a URL da API primeiro (seção abaixo do login)";
+                loginError.classList.remove("hidden");
+                return;
+            }
 
             if (!email || !password) {
                 loginError.textContent = "Preencha e-mail e senha";
@@ -281,62 +303,100 @@
             loginError.classList.add("hidden");
 
             try {
-                await signInWithEmailAndPassword(auth, email, password);
+                const res = await fetch(API_URL + "/api/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.error || "Erro no login");
+                }
+
+                authToken = data.token;
+                localStorage.setItem("authToken", authToken);
+                showAdminScreen(data.email);
             } catch (error) {
                 loginForm.classList.remove("hidden");
                 loginLoading.classList.add("hidden");
 
-                if (error.code === "auth/user-not-found" || error.code === "auth/wrong-password" || error.code === "auth/invalid-credential") {
+                if (error.message.includes("Credenciais")) {
                     loginError.textContent = "E-mail ou senha incorretos";
-                } else if (error.code === "auth/invalid-email") {
-                    loginError.textContent = "E-mail inválido";
-                } else if (error.code === "auth/invalid-api-key" || error.code === "auth/api-key-not-found") {
-                    loginError.textContent = "Erro na configuração do Firebase. Verifique as credenciais.";
+                } else if (error.message.includes("API") || error.message.includes("fetch")) {
+                    loginError.textContent = "Erro de conexão com o servidor. Verifique a URL da API.";
                 } else {
-                    loginError.textContent = "Erro ao entrar: " + error.message;
+                    loginError.textContent = "Erro: " + error.message;
                 }
                 loginError.classList.remove("hidden");
             }
         });
 
         // Logout
-        logoutBtn.addEventListener("click", async () => {
-            try {
-                await signOut(auth);
-            } catch (error) {
-                showToast("Erro ao sair: " + error.message, "error");
-            }
+        logoutBtn.addEventListener("click", () => {
+            logout();
         });
 
-        // ============================================
-        // GERENCIAMENTO DE KEYS (Realtime Database)
-        // ============================================
-
-        // Carregar keys em tempo real
-        function loadKeys() {
-            onValue(keysRef, (snapshot) => {
-                allKeys = snapshot.val() || {};
-                updateStats();
-                renderKeys();
-            }, (error) => {
-                console.error("Erro ao carregar keys:", error);
-                showToast("Erro ao carregar dados: " + error.message, "error");
-            });
+        function logout() {
+            authToken = null;
+            localStorage.removeItem("authToken");
+            showLoginScreen();
+            document.getElementById("loginEmail").value = "";
+            document.getElementById("loginPassword").value = "";
         }
 
-        // Atualizar estatísticas
-        function updateStats() {
-            const keysArray = Object.values(allKeys);
-            const total = keysArray.length;
-            const available = keysArray.filter(k => k.status === "available").length;
-            const used = keysArray.filter(k => k.status === "used").length;
+        // ============================================
+        // GERENCIAMENTO DE KEYS
+        // ============================================
 
+        async function apiFetch(path, options = {}) {
+            const defaultOptions = {
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + authToken
+                }
+            };
+            const res = await fetch(API_URL + path, { ...defaultOptions, ...options });
+            if (res.status === 401 || res.status === 403) {
+                logout();
+                throw new Error("Sessão expirada");
+            }
+            return res;
+        }
+
+        async function loadKeys() {
+            try {
+                const res = await apiFetch("/api/keys");
+                allKeys = await res.json();
+                renderKeys();
+            } catch (err) {
+                console.error("Erro ao carregar keys:", err);
+                showToast("Erro ao carregar keys: " + err.message, "error");
+            }
+        }
+
+        async function loadStats() {
+            try {
+                const res = await apiFetch("/api/keys/stats");
+                const stats = await res.json();
+                animateCounter("totalCount", stats.total);
+                animateCounter("availableCount", stats.available);
+                animateCounter("usedCount", stats.used);
+            } catch (err) {
+                console.error("Erro ao carregar stats:", err);
+            }
+        }
+
+        function updateStats() {
+            const total = allKeys.length;
+            const available = allKeys.filter(k => k.status === "available").length;
+            const used = allKeys.filter(k => k.status === "used").length;
             animateCounter("totalCount", total);
             animateCounter("availableCount", available);
             animateCounter("usedCount", used);
         }
 
-        // Animação de contador
         function animateCounter(elementId, target) {
             const el = document.getElementById(elementId);
             const current = parseInt(el.textContent) || 0;
@@ -356,18 +416,12 @@
             }, 16);
         }
 
-        // Renderizar tabela de keys
         function renderKeys() {
-            const keysArray = Object.entries(allKeys).map(([id, data]) => ({
-                id,
-                ...data
-            }));
-
-            let filtered = keysArray;
+            let filtered = allKeys;
             if (currentFilter === "available") {
-                filtered = keysArray.filter(k => k.status === "available");
+                filtered = allKeys.filter(k => k.status === "available");
             } else if (currentFilter === "used") {
-                filtered = keysArray.filter(k => k.status === "used");
+                filtered = allKeys.filter(k => k.status === "used");
             }
 
             if (filtered.length === 0) {
@@ -391,7 +445,7 @@
                         <td>${createdAt}</td>
                         <td>${usedAt}</td>
                         <td>
-                            <button class="btn btn-icon btn-danger-sm delete-btn" data-id="${key.id}" title="Excluir">
+                            <button class="btn btn-icon btn-danger-sm delete-btn" data-id="${key.id}" data-key="${escapeHtml(key.key)}" title="Excluir">
                                 🗑️
                             </button>
                         </td>
@@ -399,15 +453,10 @@
                 `;
             }).join("");
 
-            // Adicionar event listeners para botões de excluir
             document.querySelectorAll(".delete-btn").forEach(btn => {
                 btn.addEventListener("click", () => {
-                    deletingKeyRef = ref(db, "registerKeys/" + btn.dataset.id);
-                    const key = Object.values(allKeys).find(k => k.key === btn.dataset.key || keysArray.find(ka => ka.id === btn.dataset.id));
-                    const keyData = Object.entries(allKeys).find(([id]) => id === btn.dataset.id);
-                    if (keyData) {
-                        document.getElementById("modalKeyText").textContent = keyData[1].key;
-                    }
+                    deletingKeyId = btn.dataset.id;
+                    document.getElementById("modalKeyText").textContent = btn.dataset.key;
                     confirmModal.classList.remove("hidden");
                 });
             });
@@ -415,11 +464,6 @@
 
         // Adicionar key individual
         addSingleBtn.addEventListener("click", async () => {
-            if (!currentUser) {
-                showFeedback("Você precisa estar logado", "error");
-                return;
-            }
-
             const keyInput = document.getElementById("newKeyInput");
             const keyValue = keyInput.value.trim();
 
@@ -428,28 +472,26 @@
                 return;
             }
 
-            // Verificar se a key já existe
-            const exists = Object.values(allKeys).find(k => k.key === keyValue);
-            if (exists) {
-                showFeedback("Esta key já existe no sistema", "error");
-                return;
-            }
-
             addSingleBtn.disabled = true;
             addSingleBtn.textContent = "Adicionando...";
 
             try {
-                const newKeyRef = push(keysRef);
-                await set(newKeyRef, {
-                    key: keyValue,
-                    status: "available",
-                    createdAt: Date.now(),
-                    usedAt: null
+                const res = await apiFetch("/api/keys", {
+                    method: "POST",
+                    body: JSON.stringify({ key: keyValue })
                 });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.error || "Erro ao adicionar");
+                }
+
                 keyInput.value = "";
                 showFeedback("Key adicionada com sucesso!", "success");
-            } catch (error) {
-                showFeedback("Erro ao adicionar: " + error.message, "error");
+                loadKeys();
+                loadStats();
+            } catch (err) {
+                showFeedback("Erro: " + err.message, "error");
             } finally {
                 addSingleBtn.disabled = false;
                 addSingleBtn.textContent = "Adicionar Key";
@@ -458,11 +500,6 @@
 
         // Adicionar keys em lote
         addBulkBtn.addEventListener("click", async () => {
-            if (!currentUser) {
-                showFeedback("Você precisa estar logado", "error");
-                return;
-            }
-
             const textarea = document.getElementById("bulkKeysInput");
             const lines = textarea.value.split("\n").map(l => l.trim()).filter(l => l.length > 0);
 
@@ -471,37 +508,26 @@
                 return;
             }
 
-            // Filtrar keys duplicadas
-            const newKeys = lines.filter(l => !Object.values(allKeys).find(k => k.key === l));
-            if (newKeys.length === 0) {
-                showFeedback("Todas as keys já existem no sistema", "error");
-                return;
-            }
-
             addBulkBtn.disabled = true;
             addBulkBtn.textContent = "Adicionando...";
 
-            let added = 0;
-            let errors = 0;
-            const updates = {};
-
             try {
-                for (const keyValue of newKeys) {
-                    const newKeyRef = push(keysRef);
-                    updates[newKeyRef.key] = {
-                        key: keyValue,
-                        status: "available",
-                        createdAt: Date.now(),
-                        usedAt: null
-                    };
+                const res = await apiFetch("/api/keys/bulk", {
+                    method: "POST",
+                    body: JSON.stringify({ keys: lines })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    throw new Error(data.error || "Erro ao adicionar");
                 }
 
-                // Usar update multi-location para enviar todas de uma vez
-                await set(keysRef, { ...allKeys, ...updates });
                 textarea.value = "";
-                showFeedback(`${newKeys.length} key(s) adicionada(s) com sucesso!`, "success");
-            } catch (error) {
-                showFeedback("Erro ao adicionar: " + error.message, "error");
+                showFeedback(`${data.added} key(s) adicionada(s) com sucesso!`, "success");
+                loadKeys();
+                loadStats();
+            } catch (err) {
+                showFeedback("Erro: " + err.message, "error");
             } finally {
                 addBulkBtn.disabled = false;
                 addBulkBtn.textContent = "Adicionar em Lote";
@@ -510,22 +536,32 @@
 
         // Excluir key
         confirmDeleteBtn.addEventListener("click", async () => {
-            if (!deletingKeyRef) return;
+            if (!deletingKeyId) return;
 
             try {
-                await remove(deletingKeyRef);
-                showToast("Key excluída com sucesso", "success");
-            } catch (error) {
-                showToast("Erro ao excluir: " + error.message, "error");
+                const res = await apiFetch("/api/keys/" + deletingKeyId, {
+                    method: "DELETE"
+                });
+
+                if (res.ok) {
+                    showToast("Key excluída com sucesso", "success");
+                    loadKeys();
+                    loadStats();
+                } else {
+                    const data = await res.json();
+                    throw new Error(data.error || "Erro ao excluir");
+                }
+            } catch (err) {
+                showToast("Erro: " + err.message, "error");
             } finally {
                 confirmModal.classList.add("hidden");
-                deletingKeyRef = null;
+                deletingKeyId = null;
             }
         });
 
         cancelDeleteBtn.addEventListener("click", () => {
             confirmModal.classList.add("hidden");
-            deletingKeyRef = null;
+            deletingKeyId = null;
         });
 
         // ============================================
@@ -561,7 +597,6 @@
             });
         });
 
-        // Atualizar URL do gerador
         function updateGeneratorUrl() {
             const base = window.location.origin;
             const path = window.location.pathname.replace(/\/[^/]*$/, "");
@@ -593,7 +628,6 @@
 
         function formatDate(timestamp) {
             if (!timestamp) return "-";
-            // Se for string ISO ou número
             const date = new Date(timestamp);
             if (isNaN(date.getTime())) return "-";
             return date.toLocaleDateString("pt-BR", {
@@ -614,7 +648,7 @@
         // Fechar modal ao clicar no overlay
         document.querySelector(".modal-overlay").addEventListener("click", () => {
             confirmModal.classList.add("hidden");
-            deletingKeyRef = null;
+            deletingKeyId = null;
         });
 
         // Enter no campo de login
@@ -626,6 +660,9 @@
         document.getElementById("newKeyInput").addEventListener("keydown", (e) => {
             if (e.key === "Enter") addSingleBtn.click();
         });
+
+        // Inicializar
+        checkAuth();
     </script>
 </body>
 </html>

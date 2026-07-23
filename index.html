@@ -113,33 +113,19 @@
         <span id="toastMessage"></span>
     </div>
 
-    <!-- Firebase SDK (Realtime Database) -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
-        import {
-            getDatabase,
-            ref,
-            onValue,
-            runTransaction
-        } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-
+    <script>
         // ============================================
-        // CONFIGURAÇÃO DO FIREBASE
+        // CONFIGURAÇÃO DA API
         // ============================================
-        const firebaseConfig = {
-            apiKey: "AIzaSyBhsVfsNup8T6pt6F4YNSnTRGGDVeWdwV0",
-            authDomain: "snoopy-obb-a2742.firebaseapp.com",
-            databaseURL: "https://snoopy-obb-a2742-default-rtdb.firebaseio.com",
-            projectId: "snoopy-obb-a2742",
-            storageBucket: "snoopy-obb-a2742.firebasestorage.app",
-            messagingSenderId: "671954206476",
-            appId: "1:671954206476:web:da3d769adc3441024e9329"
-        };
+        // A URL da API é configurada pelo administrador no Painel ADM
+        // e compartilhada via parâmetro na URL do gerador
+        const params = new URLSearchParams(window.location.search);
+        let API_URL = params.get("api") || "";
 
-        // Inicializar Firebase
-        const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const keysRef = ref(db, "registerKeys");
+        // Se não veio por parâmetro, tentar localStorage (compartilhado pelo admin)
+        if (!API_URL) {
+            API_URL = localStorage.getItem("apiUrl") || "";
+        }
 
         // ============================================
         // ELEMENTOS DOM
@@ -158,44 +144,59 @@
         const errorMessage = document.getElementById("errorMessage");
 
         let isGenerating = false;
-        let keysData = {};
 
         // ============================================
-        // CARREGAR KEYS EM TEMPO REAL
+        // CARREGAR CONTADOR AO INICIAR
         // ============================================
-        onValue(keysRef, (snapshot) => {
-            keysData = snapshot.val() || {};
-            // Atualizar contador de disponíveis
-            const available = Object.values(keysData).filter(k => k.status === "available").length;
-            document.getElementById("availableKeysCount").textContent = available;
-        }, (error) => {
-            console.error("Erro ao carregar keys:", error);
-        });
+        async function loadAvailableCount() {
+            try {
+                if (!API_URL) return;
+                const res = await fetch(API_URL + "/api/generate/check");
+                const data = await res.json();
+                document.getElementById("availableKeysCount").textContent = data.available || 0;
+            } catch (err) {
+                console.log("Erro ao carregar contador:", err);
+            }
+        }
+
+        loadAvailableCount();
 
         // ============================================
         // ETAPA 1: VERIFICAÇÃO
         // ============================================
         verifyBtn.addEventListener("click", async () => {
-            document.getElementById("verifyStep1").classList.add("hidden");
-            verifyStep2.classList.remove("hidden");
-
-            // Verificar se há keys disponíveis
-            const available = Object.values(keysData).filter(k => k.status === "available").length;
-
-            // Aguardar para efeito visual
-            await new Promise(resolve => setTimeout(resolve, 1500));
-
-            if (available === 0) {
+            if (!API_URL) {
                 showScreen(errorScreen);
-                errorMessage.textContent = "Nenhuma Register Key disponível no momento.";
+                errorMessage.textContent = "Servidor não configurado. Entre em contato com o administrador.";
                 return;
             }
 
-            showScreen(generatorScreen);
+            document.getElementById("verifyStep1").classList.add("hidden");
+            verifyStep2.classList.remove("hidden");
+
+            try {
+                const res = await fetch(API_URL + "/api/generate/check");
+                const data = await res.json();
+
+                // Aguardar para efeito visual
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                if (data.available <= 0) {
+                    showScreen(errorScreen);
+                    errorMessage.textContent = "Nenhuma Register Key disponível no momento.";
+                    return;
+                }
+
+                document.getElementById("availableKeysCount").textContent = data.available;
+                showScreen(generatorScreen);
+            } catch (err) {
+                showScreen(errorScreen);
+                errorMessage.textContent = "Erro de conexão com o servidor.";
+            }
         });
 
         // ============================================
-        // ETAPA 2: GERAR KEY (com proteção contra race conditions)
+        // ETAPA 2: GERAR KEY
         // ============================================
         generateBtn.addEventListener("click", async () => {
             if (isGenerating) return;
@@ -206,65 +207,25 @@
             generatorLoading.classList.remove("hidden");
 
             try {
-                // Usar transação para garantir que apenas um usuário receba a key
-                const result = await runTransaction(keysRef, (currentData) => {
-                    const data = currentData || {};
-                    const entries = Object.entries(data);
-
-                    // Encontrar a primeira key disponível
-                    for (const [id, keyData] of entries) {
-                        if (keyData && keyData.status === "available") {
-                            // Marcar como usada
-                            data[id].status = "used";
-                            data[id].usedAt = Date.now();
-                            return data;
-                        }
-                    }
-
-                    // Nenhuma key disponível - abortar transação
-                    return;
+                const res = await fetch(API_URL + "/api/generate", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" }
                 });
 
-                if (!result.committed) {
-                    showScreen(errorScreen);
-                    errorMessage.textContent = "Nenhuma Register Key disponível. Todas já foram utilizadas.";
-                    isGenerating = false;
-                    return;
-                }
+                const data = await res.json();
 
-                // Encontrar a key que foi marcada como usada
-                const snapshot = result.snapshot;
-                const updatedData = snapshot.val() || {};
-                const entries = Object.entries(updatedData);
-
-                // Encontrar a última key usada (que tem usedAt)
-                let generatedKey = null;
-                for (const [id, keyData] of entries.reverse()) {
-                    if (keyData && keyData.status === "used" && keyData.usedAt) {
-                        // Verificar se é recente (usada nos últimos 5 segundos)
-                        const now = Date.now();
-                        if (now - keyData.usedAt < 5000) {
-                            generatedKey = keyData.key;
-                            break;
-                        }
-                    }
+                if (!res.ok) {
+                    throw new Error(data.error || "Erro ao gerar key");
                 }
 
                 // Aguardar para efeito visual
                 await new Promise(resolve => setTimeout(resolve, 1500));
 
-                if (generatedKey) {
-                    resultKey.textContent = generatedKey;
-                    resultBox.classList.remove("hidden");
-                } else {
-                    showScreen(errorScreen);
-                    errorMessage.textContent = "Erro ao gerar a key. Tente novamente.";
-                }
-
-            } catch (error) {
-                console.error("Erro ao gerar key:", error);
+                resultKey.textContent = data.key;
+                resultBox.classList.remove("hidden");
+            } catch (err) {
                 showScreen(errorScreen);
-                errorMessage.textContent = "Erro ao gerar: " + error.message;
+                errorMessage.textContent = err.message || "Erro ao gerar a key. Tente novamente.";
             }
         });
 
@@ -276,7 +237,6 @@
             navigator.clipboard.writeText(keyText).then(() => {
                 showToast("Register Key copiada!", "success");
             }).catch(() => {
-                // Fallback
                 const textArea = document.createElement("textarea");
                 textArea.value = keyText;
                 document.body.appendChild(textArea);
